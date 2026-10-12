@@ -3,6 +3,7 @@ class Captain::Copilot::TurnService < Captain::Copilot::ChatService # rubocop:di
   include Captain::Copilot::Tracing
 
   MAX_MODEL_CALLS = 12
+  MAX_LISTED_AGENTS = 100
   # Field meanings the model needs to pick filters and read records. Without them it treats status and priority as content.
   CHATWOOT_CONTEXT = <<~PROMPT.freeze
     How Chatwoot records support work:
@@ -37,7 +38,7 @@ class Captain::Copilot::TurnService < Captain::Copilot::ChatService # rubocop:di
     act returns what was applied, skipped or failed. Say a change was made only when act reports it as applied.
     When act reports a change as rejected or expired, say so. Propose it again only when the agent asks, as a new act call on the same saved set.
     For changes no action supports, say you cannot make them and still complete the read part.
-    Refer to a record only by an ID a tool returned. Never guess an ID or identify a person by name alone; say when the ID is unavailable.
+    Refer to a record only by an ID a tool returned or an agent's user ID from the list below. Never guess an ID or identify a person by name alone; say when the ID is unavailable.
     Return JSON with content (string) and reply_suggestion (boolean). Do not expose private provider continuation data.
   PROMPT
 
@@ -90,10 +91,12 @@ class Captain::Copilot::TurnService < Captain::Copilot::ChatService # rubocop:di
 
   def system_message
     message = super
-    # The current time is the turn's own, so a retried or resumed turn reads the same dates.
+    # Agents refer to each other by name, but assignee filters and assign_agent take user IDs. The current time is the
+    # turn's own, so a retried or resumed turn reads the same dates.
+    agents = @run.account.users.order(:name).limit(MAX_LISTED_AGENTS).map { |agent| "#{agent.name} (user ID #{agent.id})" }
     message[:content] += "\n\n#{CHATWOOT_CONTEXT}\n#{WORKFLOW_INSTRUCTIONS}\nThe agent you are helping is #{@user.name} (user ID #{@user.id}). " \
                          "Use this ID for their own records, such as conversations assigned to them.\n" \
-                         "Current time: #{@run.created_at.iso8601}."
+                         "Agents in this account: #{agents.join(', ')}.\nCurrent time: #{@run.created_at.iso8601}."
     message
   end
 
