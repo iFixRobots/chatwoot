@@ -49,6 +49,11 @@ class Captain::Copilot::TurnService < Captain::Copilot::ChatService # rubocop:di
     super.grep_v(Captain::Tools::Copilot::SearchConversationsService) + workflow_tools.map { |tool| tool.new(assistant, user: user) }
   end
 
+  # The agents named in the instructions with their user IDs. The number check counts these IDs as sources.
+  def self.listed_agents(account)
+    account.users.order(:name).limit(MAX_LISTED_AGENTS)
+  end
+
   def initialize(run, token)
     @run = run
     @token = token
@@ -93,7 +98,7 @@ class Captain::Copilot::TurnService < Captain::Copilot::ChatService # rubocop:di
     message = super
     # Agents refer to each other by name, but assignee filters and assign_agent take user IDs. The current time is the
     # turn's own, so a retried or resumed turn reads the same dates.
-    agents = @run.account.users.order(:name).limit(MAX_LISTED_AGENTS).map { |agent| "#{agent.name} (user ID #{agent.id})" }
+    agents = self.class.listed_agents(@run.account).map { |agent| "#{agent.name} (user ID #{agent.id})" }
     message[:content] += "\n\n#{CHATWOOT_CONTEXT}\n#{WORKFLOW_INSTRUCTIONS}\nThe agent you are helping is #{@user.name} (user ID #{@user.id}). " \
                          "Use this ID for their own records, such as conversations assigned to them.\n" \
                          "Agents in this account: #{agents.join(', ')}.\nCurrent time: #{@run.created_at.iso8601}."
