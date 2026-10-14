@@ -1,6 +1,8 @@
 name: Build Beeper filter hotfix
 on:
   workflow_dispatch:
+  push:
+    branches: [fix/inbox-status-all]
 permissions:
   contents: read
   packages: write
